@@ -1,0 +1,115 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+  WORKSPACE_OWNER
+  WORKSPACE_MEMBER
+}
+
+enum PlanTier {
+  FREE
+  PRO
+  TEAM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
+
+model User {
+  id            String           @id @default(uuid())
+  email         String           @unique
+  name          String?
+  passwordHash  String?          // Nullable for OAuth accounts
+  avatarUrl     String?
+  role          Role             @default(USER)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  
+  // Relations
+  subscription  Subscription?
+  documents     Document[]
+  histories     RewriteHistory[]
+  payments      Payment[]
+  activityLogs  ActivityLog[]
+  workspaceId   String?
+  workspace     Workspace?       @relation(fields: [workspaceId], references: [id])
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members   User[]
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeCustomerId     String             @unique
+  stripeSubscriptionId String?            @unique
+  tier                 PlanTier           @default(FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodEnd     DateTime?
+  wordTokensRemaining  Int                @default(5000) // Monthly reset ceiling
+}
+
+model Document {
+  id         String   @id @default(uuid())
+  title      String
+  content    String   @db.Text
+  folderPath String   @default("/")
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isStarred  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model RewriteHistory {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalText   String   @db.Text
+  transformedText String  @db.Text
+  tone           String
+  lengthSetting  String
+  modelUsed      String
+  wordCount      Int
+  createdAt      DateTime @default(now())
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeInvoiceId String  @unique
+  amount        Int      // Stored in cents
+  currency      String   @default("usd")
+  status        String
+  createdAt     DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
